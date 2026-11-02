@@ -51,7 +51,7 @@ class Base(DeclarativeBase):
 
 
 class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "medishield_users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     username: Mapped[str] = mapped_column(String(40), unique=True, index=True)
@@ -60,10 +60,10 @@ class User(Base):
 
 
 class Dataset(Base):
-    __tablename__ = "datasets"
+    __tablename__ = "medishield_datasets"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("medishield_users.id"), index=True)
     name: Mapped[str] = mapped_column(String(255))
     kind: Mapped[str] = mapped_column(String(20), default="raw")
     rows: Mapped[int] = mapped_column(Integer)
@@ -73,11 +73,11 @@ class Dataset(Base):
 
 
 class TrainedModel(Base):
-    __tablename__ = "trained_models"
+    __tablename__ = "medishield_trained_models"
     __table_args__ = (UniqueConstraint("user_id", "slug"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("medishield_users.id"), index=True)
     slug: Mapped[str] = mapped_column(String(120))
     disease_name: Mapped[str] = mapped_column(String(255))
     algorithm: Mapped[str] = mapped_column(String(80))
