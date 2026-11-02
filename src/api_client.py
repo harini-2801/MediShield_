@@ -5,12 +5,9 @@ from __future__ import annotations
 import io
 import os
 import secrets
-import subprocess
-import sys
-import tempfile
 import threading
 import time
-from pathlib import Path
+import traceback
 
 import pandas as pd
 import requests
@@ -18,30 +15,49 @@ import streamlit as st
 
 
 _EMBEDDED_PORT = 8765
-_embedded_proc: subprocess.Popen | None = None
+_embedded_thread: threading.Thread | None = None
+_embedded_server = None
+_embedded_error: str | None = None
 _embedded_lock = threading.Lock()
-_EMBEDDED_LOG = Path(tempfile.gettempdir()) / "medishield_api.log"
+
+
+def _run_embedded_backend() -> None:
+    """Thread target: import the API and serve it on localhost."""
+    global _embedded_server, _embedded_error
+    try:
+        import uvicorn
+
+        from backend.main import app
+
+        config = uvicorn.Config(
+            app,
+            host="127.0.0.1",
+            port=_EMBEDDED_PORT,
+            log_level="warning",
+            loop="asyncio",
+        )
+        _embedded_server = uvicorn.Server(config)
+        _embedded_server.run()
+    except BaseException:
+        _embedded_error = traceback.format_exc()
 
 
 def _start_embedded_backend() -> None:
-    """Launch the API child process (non-blocking) if it isn't running."""
-    global _embedded_proc
+    """Start the API in a background thread of this process (non-blocking).
+
+    Sharing the process with Streamlit avoids a second Python interpreter
+    and its copy of pandas/numpy, which matters on 512 MB instances.
+    """
+    global _embedded_thread, _embedded_error
     with _embedded_lock:
-        if _embedded_proc is not None and _embedded_proc.poll() is None:
+        if _embedded_thread is not None and _embedded_thread.is_alive():
             return
-        env = dict(os.environ)
-        env.setdefault("SECRET_KEY", secrets.token_urlsafe(48))
-        log = open(_EMBEDDED_LOG, "ab")
-        _embedded_proc = subprocess.Popen(
-            [
-                sys.executable, "-m", "uvicorn", "backend.main:app",
-                "--host", "127.0.0.1", "--port", str(_EMBEDDED_PORT),
-            ],
-            cwd=Path(__file__).resolve().parent.parent,
-            env=env,
-            stdout=log,
-            stderr=subprocess.STDOUT,
+        _embedded_error = None
+        os.environ.setdefault("SECRET_KEY", secrets.token_urlsafe(48))
+        _embedded_thread = threading.Thread(
+            target=_run_embedded_backend, name="medishield-api", daemon=True
         )
+        _embedded_thread.start()
 
 
 def warm_up() -> None:
@@ -62,21 +78,15 @@ def _ensure_embedded_backend() -> str:
 
     deadline = time.time() + 120
     while time.time() < deadline:
-        try:
-            if requests.get(url + "/health", timeout=1).ok:
-                return url
-        except requests.RequestException:
-            pass
-        if _embedded_proc.poll() is not None:
-            try:
-                tail = _EMBEDDED_LOG.read_text(errors="replace")[-800:]
-            except OSError:
-                tail = ""
+        server = _embedded_server
+        if server is not None and server.started:
+            return url
+        if not _embedded_thread.is_alive():
             raise ApiError(
-                "The MediShield server failed to start. "
-                f"Details: {tail.strip() or 'no log output'}"
+                "The MediShield server failed to start. Details: "
+                + (_embedded_error or "no error output")[-800:]
             )
-        time.sleep(0.3)
+        time.sleep(0.2)
 
     raise ApiError("The MediShield server is taking too long to start.")
 
