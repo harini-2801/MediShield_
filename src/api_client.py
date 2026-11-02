@@ -46,7 +46,7 @@ def _start_embedded_backend() -> None:
 
 def warm_up() -> None:
     """Begin starting the embedded API early, e.g. while the user logs in."""
-    if not os.environ.get("API_URL"):
+    if not os.environ.get("MEDISHIELD_API_URL"):
         _start_embedded_backend()
 
 
@@ -82,9 +82,9 @@ def _ensure_embedded_backend() -> str:
 
 
 def _base_url() -> str:
-    if not os.environ.get("API_URL"):
+    if not os.environ.get("MEDISHIELD_API_URL"):
         return _ensure_embedded_backend()
-    url = os.environ["API_URL"].rstrip("/")
+    url = os.environ["MEDISHIELD_API_URL"].rstrip("/")
     # Render's private-network value is a bare host:port.
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
