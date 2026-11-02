@@ -1,23 +1,23 @@
 
-"""Medical AutoML application home page."""
+"""MediShield application home page."""
 
 import streamlit as st
 
+from src.theme import apply_theme, card, hero
+
 
 st.set_page_config(
-    page_title="Medical AutoML",
+    page_title="MediShield",
     page_icon="🩺",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+apply_theme()
 
-st.title("Medical AutoML")
-st.subheader("Medical dataset analysis and machine learning")
-
-st.write(
-    "A workflow for uploading medical datasets, cleaning data, "
-    "training classification models, evaluating performance, "
-    "and exploring model explanations."
+hero(
+    "🩺 MediShield",
+    "Medical dataset analysis and machine learning: upload, clean, train, "
+    "predict and explain.",
 )
 
 st.warning(
@@ -26,84 +26,50 @@ st.warning(
     "without appropriate validation, governance, and professional oversight."
 )
 
-st.divider()
-
 st.header("Application workflow")
 
-col1, col2 = st.columns(2)
+steps = [
+    ("1", "Dataset Upload",
+     "Upload CSV or Excel files, review columns, missing values and "
+     "duplicates, and select the target label."),
+    ("2", "Data Cleaning",
+     "Normalise names and whitespace, detect missing-value markers and "
+     "review the cleaning report."),
+    ("3", "Model Training",
+     "Pick algorithms, tune explained hyperparameters, compare metrics and "
+     "choose which model to deploy."),
+    ("4", "Prediction",
+     "Upload new records, generate model outputs and export them to CSV."),
+    ("5", "Explainability",
+     "Review global feature importance and individual SHAP explanations."),
+]
 
-with col1:
-    st.subheader("1. Data preparation")
-    st.markdown(
-        """
-        **Dataset Upload**
-        - Upload CSV or Excel datasets
-        - Review columns, missing values, and duplicate rows
-        - Select the target label
+cols = st.columns(len(steps))
+for col, (num, title, body) in zip(cols, steps):
+    with col:
+        card(title, body, step=num)
 
-        **Data Cleaning**
-        - Normalize column names and whitespace
-        - Identify common missing-value markers
-        - Review the cleaning report
-        """
+st.write("")
+st.header("What's new")
+n1, n2 = st.columns(2)
+with n1:
+    card(
+        "Hyperparameter control",
+        "Every model exposes its hyperparameters with plain-language "
+        "explanations, so you can see and decide how it learns.",
+    )
+with n2:
+    card(
+        "Manual model selection",
+        "Train any subset of algorithms and either let MediShield pick the "
+        "best by macro F1 or choose the one to deploy yourself.",
     )
 
-    st.subheader("2. Model development")
-    st.markdown(
-        """
-        **Model Training**
-        - Compare classification algorithms
-        - Review evaluation metrics
-        - Save the selected model pipeline
-        """
-    )
-
-with col2:
-    st.subheader("3. Model usage")
-    st.markdown(
-        """
-        **Prediction**
-        - Upload new records
-        - Generate model outputs
-        - Export results to CSV
-
-        **Explainability**
-        - Review global feature importance
-        - Explore individual SHAP explanations
-        """
-    )
-
-    st.subheader("Current project status")
-
-    status_items = [
-        ("Dataset ingestion", "pages/1_Dataset_Upload.py"),
-        ("Data cleaning", "pages/2_Data_Cleaning.py"),
-        ("Model training", "pages/3_Model_Training.py"),
-        ("Prediction", "pages/4_Prediction.py"),
-        ("Explainability", "pages/5_Explainability.py"),
-    ]
-
-    for label, page_path in status_items:
-        st.write(f"**{label}:** `{page_path}`")
-
-st.divider()
-
-st.header("Getting started")
-
-st.markdown(
-    """
-    1. Open **Dataset Upload** from the sidebar.
-    2. Upload your dataset and choose the target column.
-    3. Open **Data Cleaning** and review the cleaning report.
-    4. Open **Model Training** to train and compare classifiers.
-    5. Use **Prediction** or **Explainability** after training.
-    """
-)
-
+st.write("")
 st.info(
     "Only use data you are authorized to process. Remove direct "
     "patient identifiers where possible, protect sensitive health "
     "information, and use trusted model artifacts."
 )
 
-st.caption("Medical AutoML | Experimental machine learning platform")
+st.caption("MediShield | Experimental machine learning platform")

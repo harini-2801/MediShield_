@@ -2,6 +2,8 @@
 """Explain predictions from the existing prediction session."""
 
 import streamlit as st
+
+from src.theme import apply_theme
 import pandas as pd
 import plotly.express as px
 
@@ -17,6 +19,7 @@ st.set_page_config(
     page_icon="🔍",
     layout="wide",
 )
+apply_theme()
 
 st.title("Prediction Explainability")
 

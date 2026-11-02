@@ -1,6 +1,8 @@
 
 """Train, evaluate, and manage disease-specific model packages."""
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
 
@@ -9,8 +11,6 @@ import numpy as np
 import pandas as pd
 
 from sklearn.base import clone
-from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import (
     accuracy_score,
     balanced_accuracy_score,
@@ -19,8 +19,8 @@ from sklearn.metrics import (
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import LabelEncoder
-from sklearn.svm import SVC
 
+from src.hyperparameters import HYPERPARAMETERS, build_models, default_params
 from src.preprocessing import build_preprocessor, split_features_target
 
 
@@ -131,8 +131,23 @@ def train_disease_model(
     disease_name: str,
     test_size: float = 0.2,
     random_state: int = 42,
+    selected_models: list[str] | None = None,
+    hyperparameters: dict[str, dict] | None = None,
+    save_model: str | None = None,
 ) -> dict:
-    """Train several classifiers and save the best disease model."""
+    """Train the chosen classifiers and save one disease model.
+
+    selected_models: algorithms to train (default: all available).
+    hyperparameters: {algorithm: {param: value}} overrides of the defaults.
+    save_model: algorithm to deploy; None picks the best by macro F1.
+    """
+    selected_models = selected_models or list(HYPERPARAMETERS)
+
+    if save_model is not None and save_model not in selected_models:
+        raise ValueError(
+            f"'{save_model}' must be among the trained models."
+        )
+
     if not 0.1 <= test_size <= 0.4:
         raise ValueError(
             "Test size must be between 0.1 and 0.4."
@@ -211,30 +226,11 @@ def train_disease_model(
         stratify=y_encoded,
     )
 
-    models = {
-        "Logistic Regression": LogisticRegression(
-            max_iter=2000,
-            class_weight="balanced",
-            random_state=random_state,
-        ),
-        "Random Forest": RandomForestClassifier(
-            n_estimators=200,
-            class_weight="balanced",
-            random_state=random_state,
-            n_jobs=-1,
-        ),
-        "Extra Trees": ExtraTreesClassifier(
-            n_estimators=200,
-            class_weight="balanced",
-            random_state=random_state,
-            n_jobs=-1,
-        ),
-        "Support Vector Machine": SVC(
-            probability=True,
-            class_weight="balanced",
-            random_state=random_state,
-        ),
-    }
+    models = build_models(
+        selected_models,
+        hyperparameters,
+        random_state,
+    )
 
     preprocessor_template = build_preprocessor(X_train)
 
@@ -289,8 +285,18 @@ def train_disease_model(
         .reset_index(drop=True)
     )
 
-    best_name = str(results_df.iloc[0]["model"])
+    if save_model is not None:
+        if save_model not in successful_pipelines:
+            raise RuntimeError(
+                f"'{save_model}' failed to train: "
+                f"{errors.get(save_model, 'unknown error')}"
+            )
+        best_name = save_model
+    else:
+        best_name = str(results_df.iloc[0]["model"])
+
     best_pipeline = successful_pipelines[best_name]
+    chosen_row = results_df.loc[results_df["model"] == best_name].iloc[0]
 
     # Store transformed reference records for later SHAP explanations.
     preprocessor = best_pipeline.named_steps["preprocessor"]
@@ -312,8 +318,13 @@ def train_disease_model(
 
     metrics = {
         key: float(value)
-        for key, value in results_df.iloc[0].to_dict().items()
+        for key, value in chosen_row.to_dict().items()
         if key != "model"
+    }
+
+    used_params = {
+        name: {**default_params(name), **(hyperparameters or {}).get(name, {})}
+        for name in models
     }
 
     package = {
@@ -327,6 +338,9 @@ def train_disease_model(
         "best_model_name": best_name,
         "metrics": metrics,
         "comparison_results": results_df,
+        "hyperparameters": used_params,
+        "selection_mode": "manual" if save_model else "auto",
+        "fitted_params": best_pipeline.named_steps["model"].get_params(),
         "background_transformed": background,
         "transformed_feature_names": feature_names,
         "evaluation": {

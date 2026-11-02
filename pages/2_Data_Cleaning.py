@@ -4,6 +4,8 @@
 import pandas as pd
 import streamlit as st
 
+from src.theme import apply_theme
+
 from src.data_cleaning import clean_dataset
 
 
@@ -12,6 +14,7 @@ st.set_page_config(
     page_icon="🧹",
     layout="wide",
 )
+apply_theme()
 
 st.title("Data Cleaning")
 st.caption(

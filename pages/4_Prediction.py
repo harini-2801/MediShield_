@@ -2,6 +2,8 @@
 """Batch predictions using saved disease-specific models."""
 
 import streamlit as st
+
+from src.theme import apply_theme
 import pandas as pd
 
 from src.model_training import (
@@ -16,6 +18,7 @@ st.set_page_config(
     page_icon="🔎",
     layout="wide",
 )
+apply_theme()
 
 st.title("Patient Batch Prediction")
 
@@ -74,6 +77,25 @@ st.caption(
     f"Target: {package['target_column']} | "
     f"Algorithm: {package['best_model_name']}"
 )
+
+with st.expander("Model hyperparameters"):
+    from src.hyperparameters import HYPERPARAMETERS
+
+    algo = package["best_model_name"]
+    used = package.get("hyperparameters", {}).get(algo)
+    if used is None:
+        st.write("This model was saved before hyperparameters were recorded.")
+    else:
+        specs = {s["name"]: s for s in HYPERPARAMETERS[algo]}
+        st.dataframe(
+            pd.DataFrame({
+                "Hyperparameter": [specs[k]["label"] for k in used],
+                "Value": [str(v) for v in used.values()],
+                "What it does": [specs[k]["help"] for k in used],
+            }),
+            width="stretch",
+            hide_index=True,
+        )
 
 uploaded_file = st.file_uploader(
     "Upload a CSV containing new patient records",

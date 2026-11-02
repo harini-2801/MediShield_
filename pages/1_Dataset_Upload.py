@@ -3,6 +3,8 @@
 
 import streamlit as st
 
+from src.theme import apply_theme
+
 from src.ingestion import (
     get_excel_sheet_names,
     load_dataset,
@@ -15,6 +17,7 @@ st.set_page_config(
     page_icon="📂",
     layout="wide",
 )
+apply_theme()
 
 st.title("Dataset Upload")
 st.write(
