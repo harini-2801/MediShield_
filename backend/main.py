@@ -26,11 +26,6 @@ from backend.security import (
     verify_password,
 )
 from src.data_cleaning import clean_dataset
-from src.explainability import (
-    explain_records,
-    global_importance,
-    individual_importance,
-)
 from src.hyperparameters import HYPERPARAMETERS, MODEL_INFO
 from src.ingestion import get_excel_sheet_names, load_dataset, profile_dataset
 from src.model_training import train_disease_model, validate_package
@@ -430,6 +425,13 @@ def explain(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    # Imported lazily: shap is heavy and only needed for explanations.
+    from src.explainability import (
+        explain_records,
+        global_importance,
+        individual_importance,
+    )
+
     package = load_package(get_model_row(db, user, slug))
     df = read_csv_upload(file)
     max_rows = max(1, min(max_rows, 20))

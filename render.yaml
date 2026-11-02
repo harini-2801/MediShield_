@@ -1,34 +1,15 @@
 services:
-  # FastAPI backend: auth, datasets, training, prediction, explanations.
+  # One service runs the Streamlit UI and its FastAPI backend together.
+  # Optional: set DATABASE_URL (Postgres) so accounts and models survive
+  # restarts; without it the backend uses a local SQLite file.
   - type: web
-    name: medishield-api
+    name: medishield-ui
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements-api.txt
-    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: SECRET_KEY
         generateValue: true
-      # Postgres connection string (Render allows only one free database per
-      # account, so supply an existing one or a free external Postgres).
-      - key: DATABASE_URL
-        sync: false
-
-  # Streamlit user interface; talks to the API over Render's private network.
-  - type: web
-    name: medishield-ui
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements-ui.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
-    envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
-      - key: API_URL
-        fromService:
-          type: web
-          name: medishield-api
-          property: hostport

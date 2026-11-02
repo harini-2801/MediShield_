@@ -4,14 +4,57 @@ from __future__ import annotations
 
 import io
 import os
+import secrets
+import subprocess
+import sys
+import time
+from pathlib import Path
 
 import pandas as pd
 import requests
 import streamlit as st
 
 
+_EMBEDDED_PORT = 8765
+_embedded_proc: subprocess.Popen | None = None
+
+
+def _ensure_embedded_backend() -> str:
+    """Start the API as a child process when no API_URL is configured.
+
+    This lets a single Streamlit service (e.g. one Render web service)
+    host the whole app. Without DATABASE_URL the API uses a local SQLite
+    file, so accounts reset whenever the service restarts.
+    """
+    global _embedded_proc
+    url = f"http://127.0.0.1:{_EMBEDDED_PORT}"
+
+    if _embedded_proc is None or _embedded_proc.poll() is not None:
+        env = dict(os.environ)
+        env.setdefault("SECRET_KEY", secrets.token_urlsafe(48))
+        _embedded_proc = subprocess.Popen(
+            [
+                sys.executable, "-m", "uvicorn", "backend.main:app",
+                "--host", "127.0.0.1", "--port", str(_EMBEDDED_PORT),
+            ],
+            cwd=Path(__file__).resolve().parent.parent,
+            env=env,
+        )
+        deadline = time.time() + 60
+        while time.time() < deadline:
+            try:
+                if requests.get(url + "/health", timeout=1).ok:
+                    break
+            except requests.RequestException:
+                time.sleep(0.5)
+
+    return url
+
+
 def _base_url() -> str:
-    url = os.environ.get("API_URL", "http://localhost:8000").rstrip("/")
+    if not os.environ.get("API_URL"):
+        return _ensure_embedded_backend()
+    url = os.environ["API_URL"].rstrip("/")
     # Render's private-network value is a bare host:port.
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
