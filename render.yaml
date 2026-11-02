@@ -23,7 +23,7 @@ services:
 
   # Streamlit user interface; talks to the API over Render's private network.
   - type: web
-    name: medishield
+    name: medishield-ui
     runtime: python
     plan: free
     buildCommand: pip install -r requirements-ui.txt
