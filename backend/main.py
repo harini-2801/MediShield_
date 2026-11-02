@@ -25,11 +25,8 @@ from backend.security import (
     hash_password,
     verify_password,
 )
-from src.data_cleaning import clean_dataset
 from src.hyperparameters import HYPERPARAMETERS, MODEL_INFO
 from src.ingestion import get_excel_sheet_names, load_dataset, profile_dataset
-from src.model_training import train_disease_model, validate_package
-from src.prediction import predict_records, prepare_prediction_input
 
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,40}$")
@@ -88,6 +85,8 @@ def get_model_row(db: Session, user: User, slug: str) -> TrainedModel:
 
 
 def load_package(row: TrainedModel) -> dict:
+    from src.model_training import validate_package  # heavy: sklearn
+
     return validate_package(joblib.load(io.BytesIO(row.blob)))
 
 
@@ -265,6 +264,8 @@ def clean(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    from src.data_cleaning import clean_dataset
+
     source = get_dataset(db, user, dataset_id)
     try:
         cleaned, report = clean_dataset(
@@ -313,6 +314,8 @@ def train(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    from src.model_training import train_disease_model
+
     df = load_df(get_dataset(db, user, body.dataset_id))
 
     try:
@@ -408,6 +411,8 @@ def predict(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
+    from src.prediction import predict_records
+
     package = load_package(get_model_row(db, user, slug))
     df = read_csv_upload(file)
     try:
@@ -425,7 +430,8 @@ def explain(
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
 ):
-    # Imported lazily: shap is heavy and only needed for explanations.
+    # Imported lazily: shap and sklearn are heavy.
+    from src.prediction import prepare_prediction_input
     from src.explainability import (
         explain_records,
         global_importance,

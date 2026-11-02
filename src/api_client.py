@@ -7,6 +7,8 @@ import os
 import secrets
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -17,21 +19,19 @@ import streamlit as st
 
 _EMBEDDED_PORT = 8765
 _embedded_proc: subprocess.Popen | None = None
+_embedded_lock = threading.Lock()
+_EMBEDDED_LOG = Path(tempfile.gettempdir()) / "medishield_api.log"
 
 
-def _ensure_embedded_backend() -> str:
-    """Start the API as a child process when no API_URL is configured.
-
-    This lets a single Streamlit service (e.g. one Render web service)
-    host the whole app. Without DATABASE_URL the API uses a local SQLite
-    file, so accounts reset whenever the service restarts.
-    """
+def _start_embedded_backend() -> None:
+    """Launch the API child process (non-blocking) if it isn't running."""
     global _embedded_proc
-    url = f"http://127.0.0.1:{_EMBEDDED_PORT}"
-
-    if _embedded_proc is None or _embedded_proc.poll() is not None:
+    with _embedded_lock:
+        if _embedded_proc is not None and _embedded_proc.poll() is None:
+            return
         env = dict(os.environ)
         env.setdefault("SECRET_KEY", secrets.token_urlsafe(48))
+        log = open(_EMBEDDED_LOG, "ab")
         _embedded_proc = subprocess.Popen(
             [
                 sys.executable, "-m", "uvicorn", "backend.main:app",
@@ -39,16 +39,46 @@ def _ensure_embedded_backend() -> str:
             ],
             cwd=Path(__file__).resolve().parent.parent,
             env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
         )
-        deadline = time.time() + 60
-        while time.time() < deadline:
-            try:
-                if requests.get(url + "/health", timeout=1).ok:
-                    break
-            except requests.RequestException:
-                time.sleep(0.5)
 
-    return url
+
+def warm_up() -> None:
+    """Begin starting the embedded API early, e.g. while the user logs in."""
+    if not os.environ.get("API_URL"):
+        _start_embedded_backend()
+
+
+def _ensure_embedded_backend() -> str:
+    """Return the embedded API's URL, waiting until it is ready.
+
+    This lets a single Streamlit service host the whole app. Without
+    DATABASE_URL the API uses a local SQLite file, so accounts reset
+    whenever the service restarts.
+    """
+    url = f"http://127.0.0.1:{_EMBEDDED_PORT}"
+    _start_embedded_backend()
+
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        try:
+            if requests.get(url + "/health", timeout=1).ok:
+                return url
+        except requests.RequestException:
+            pass
+        if _embedded_proc.poll() is not None:
+            try:
+                tail = _EMBEDDED_LOG.read_text(errors="replace")[-800:]
+            except OSError:
+                tail = ""
+            raise ApiError(
+                "The MediShield server failed to start. "
+                f"Details: {tail.strip() or 'no log output'}"
+            )
+        time.sleep(0.3)
+
+    raise ApiError("The MediShield server is taking too long to start.")
 
 
 def _base_url() -> str:

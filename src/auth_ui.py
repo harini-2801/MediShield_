@@ -16,6 +16,9 @@ def require_login() -> None:
                 st.rerun()
         return
 
+    # Start the backend now so it is ready by the time the user submits.
+    api_client.warm_up()
+
     # Hide the page navigation until the user is authenticated.
     st.markdown(
         '<style>[data-testid="stSidebar"] {display: none;}</style>',
@@ -52,7 +55,9 @@ def require_login() -> None:
                     "Create account", type="primary", width="stretch"
                 )
             if created:
-                if new_pass != confirm:
+                if len(new_pass) < 8:
+                    st.error("Password must be at least 8 characters.")
+                elif new_pass != confirm:
                     st.error("Passwords do not match.")
                 else:
                     _authenticate(api_client.signup, new_user, new_pass)
@@ -62,7 +67,10 @@ def require_login() -> None:
 
 def _authenticate(action, username: str, password: str) -> None:
     try:
-        with st.spinner("Contacting server..."):
+        with st.spinner(
+            "Contacting server (the first request after a restart can "
+            "take up to a minute)..."
+        ):
             result = action(username, password)
     except api_client.ApiError as exc:
         st.error(str(exc))

@@ -8,9 +8,6 @@ in the UI is exactly what is trained.
 
 from __future__ import annotations
 
-from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
-from sklearn.linear_model import LogisticRegression
-from sklearn.svm import SVC
 
 
 MODEL_INFO = {
@@ -220,6 +217,12 @@ def build_models(
     random_state: int = 42,
 ) -> dict:
     """Create estimators for the selected models using the given params."""
+    # Imported here so the API can start (and serve the catalogue and
+    # logins) without paying scikit-learn's slow import time.
+    from sklearn.ensemble import ExtraTreesClassifier, RandomForestClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.svm import SVC
+
     params = params or {}
     estimators = {}
 
