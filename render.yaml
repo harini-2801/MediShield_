@@ -1,7 +1,3 @@
-databases:
-  - name: medishield-db
-    plan: free
-
 services:
   # FastAPI backend: auth, datasets, training, prediction, explanations.
   - type: web
@@ -16,10 +12,10 @@ services:
         value: 3.11.9
       - key: SECRET_KEY
         generateValue: true
+      # Postgres connection string (Render allows only one free database per
+      # account, so supply an existing one or a free external Postgres).
       - key: DATABASE_URL
-        fromDatabase:
-          name: medishield-db
-          property: connectionString
+        sync: false
 
   # Streamlit user interface; talks to the API over Render's private network.
   - type: web
