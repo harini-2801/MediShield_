@@ -3,13 +3,13 @@
 
 import streamlit as st
 
-from src.theme import apply_theme
+import hashlib
 
-from src.ingestion import (
-    get_excel_sheet_names,
-    load_dataset,
-    profile_dataset,
-)
+import pandas as pd
+
+from src import api_client
+from src.auth_ui import require_login
+from src.theme import apply_theme
 
 
 st.set_page_config(
@@ -18,6 +18,7 @@ st.set_page_config(
     layout="wide",
 )
 apply_theme()
+require_login()
 
 st.title("Dataset Upload")
 st.write(
@@ -45,21 +46,22 @@ filename = uploaded_file.name
 
 # Use a content-based key so changing files invalidates the
 # previously selected sheet and target.
-import hashlib
-
 file_key = hashlib.sha256(file_bytes).hexdigest()
 
 if st.session_state.get("ingestion_file_key") != file_key:
     st.session_state["ingestion_file_key"] = file_key
-    st.session_state.pop("selected_target", None)
-    st.session_state.pop("selected_sheet", None)
-    st.session_state.pop("loaded_dataset", None)
+    for key in (
+        "selected_target", "selected_sheet", "loaded_dataset",
+        "loaded_dataset_id", "loaded_profile", "upload_key",
+        "cleaned_dataset", "cleaned_dataset_id", "cleaning_report",
+    ):
+        st.session_state.pop(key, None)
 
 sheet_name = None
 
 try:
     if filename.lower().endswith((".xlsx", ".xls")):
-        sheet_names = get_excel_sheet_names(file_bytes)
+        sheet_names = api_client.sheet_names(file_bytes, filename)
 
         if not sheet_names:
             st.error("No worksheets were found in this workbook.")
@@ -81,28 +83,36 @@ try:
 
         st.session_state["selected_sheet"] = sheet_name
 
-    df = load_dataset(
-        file_bytes=file_bytes,
-        filename=filename,
-        sheet_name=sheet_name,
-    )
+    # Upload once per file/sheet, not on every Streamlit rerun.
+    if st.session_state.get("upload_key") != (file_key, sheet_name):
+        with st.spinner("Uploading and profiling dataset..."):
+            uploaded = api_client.upload_dataset(
+                file_bytes, filename, sheet_name
+            )
+            st.session_state["loaded_dataset"] = (
+                api_client.download_dataset(uploaded["id"])
+            )
+        st.session_state["loaded_dataset_id"] = uploaded["id"]
+        st.session_state["loaded_profile"] = uploaded["profile"]
+        st.session_state["upload_key"] = (file_key, sheet_name)
+        for key in (
+            "cleaned_dataset", "cleaned_dataset_id", "cleaning_report",
+        ):
+            st.session_state.pop(key, None)
 
-except ValueError as exc:
+    df = st.session_state["loaded_dataset"]
+
+except api_client.ApiError as exc:
     st.error(str(exc))
     st.stop()
-
-except Exception as exc:
-    st.error(f"Unexpected ingestion error: {exc}")
-    st.stop()
-
-st.session_state["loaded_dataset"] = df
 
 st.success(f"Successfully loaded: {filename}")
 
 # Dataset overview
 st.subheader("Dataset overview")
 
-profile = profile_dataset(df)
+profile = dict(st.session_state["loaded_profile"])
+profile["column_profiles"] = pd.DataFrame(profile["column_profiles"])
 
 col1, col2, col3, col4 = st.columns(4)
 

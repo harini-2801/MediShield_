@@ -3,15 +3,12 @@
 
 import streamlit as st
 
-from src.theme import apply_theme
 import pandas as pd
 import plotly.express as px
 
-from src.explainability import (
-    explain_records,
-    global_importance,
-    individual_importance,
-)
+from src import api_client
+from src.auth_ui import require_login
+from src.theme import apply_theme
 
 
 st.set_page_config(
@@ -20,6 +17,7 @@ st.set_page_config(
     layout="wide",
 )
 apply_theme()
+require_login()
 
 st.title("Prediction Explainability")
 
@@ -66,18 +64,18 @@ else:
 if st.button("Generate explanations", type="primary"):
     try:
         with st.spinner("Calculating SHAP explanations..."):
-            explanation = explain_records(
-                package=package,
-                input_data=features,
-                max_rows=rows_to_explain,
+            explanation = api_client.explain(
+                model_slug,
+                st.session_state["prediction_csv"],
+                rows_to_explain,
             )
-            importance_df = global_importance(explanation)
+            importance_df = pd.DataFrame(explanation["global_importance"])
 
         st.session_state["active_explanation"] = explanation
         st.session_state["active_global_importance"] = importance_df
         st.session_state["explanation_model_slug"] = model_slug
 
-    except Exception as exc:
+    except (api_client.ApiError, KeyError) as exc:
         st.error(f"Could not generate explanations: {exc}")
 
 explanation = st.session_state.get("active_explanation")
@@ -134,9 +132,8 @@ if (
     )
 
     class_names = explanation["class_names"]
-    shap_values = explanation["shap_values"].values
 
-    if getattr(shap_values, "ndim", 0) == 3:
+    if explanation["multiclass"]:
         class_index = st.selectbox(
             "Class to explain",
             options=list(range(len(class_names))),
@@ -145,11 +142,7 @@ if (
     else:
         class_index = 0
 
-    detail_df = individual_importance(
-        explanation=explanation,
-        row_index=row_index,
-        class_index=class_index,
-    )
+    detail_df = pd.DataFrame(explanation["details"][row_index][class_index])
 
     detail_chart_data = (
         detail_df.head(20)

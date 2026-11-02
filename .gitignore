@@ -31,3 +31,9 @@ artifacts/*.pkl
 .pytest_cache/
 .mypy_cache/
 .coverage
+__pycache__/
+*.pyc
+*.db
+artifacts/
+.env
+.pytest_cache/

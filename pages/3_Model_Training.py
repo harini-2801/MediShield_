@@ -5,8 +5,8 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from src.hyperparameters import HYPERPARAMETERS, MODEL_INFO, default_params
-from src.model_training import train_disease_model, list_saved_models
+from src import api_client
+from src.auth_ui import require_login
 from src.theme import apply_theme, hero
 
 
@@ -16,6 +16,21 @@ st.set_page_config(
     layout="wide",
 )
 apply_theme()
+require_login()
+
+try:
+    _catalog = api_client.catalog()
+except api_client.ApiError as exc:
+    st.error(str(exc))
+    st.stop()
+
+HYPERPARAMETERS = _catalog["hyperparameters"]
+MODEL_INFO = _catalog["models"]
+
+
+def default_params(model_name: str) -> dict:
+    return {s["name"]: s["default"] for s in HYPERPARAMETERS[model_name]}
+
 
 hero(
     "Disease Model Training",
@@ -178,16 +193,21 @@ if not selected_models:
 if submitted:
     try:
         with st.spinner("Training models and preparing explanations..."):
-            output = train_disease_model(
-                df=df,
-                target_column=target_column,
-                disease_name=disease_name,
-                test_size=test_size,
-                random_state=int(random_state),
-                selected_models=selected_models,
-                hyperparameters=hyperparameters,
-                save_model=save_model,
+            dataset_id = (
+                st.session_state.get("cleaned_dataset_id")
+                if st.session_state.get("cleaned_dataset") is not None
+                else st.session_state.get("loaded_dataset_id")
             )
+            output = api_client.train_model({
+                "dataset_id": dataset_id,
+                "target_column": target_column,
+                "disease_name": disease_name,
+                "test_size": test_size,
+                "random_state": int(random_state),
+                "selected_models": selected_models,
+                "hyperparameters": hyperparameters,
+                "save_model": save_model,
+            })
 
         package = output["package"]
         st.session_state["last_trained_model_slug"] = package["model_slug"]
@@ -195,8 +215,7 @@ if submitted:
         st.success(
             f"Saved {package['disease_name']} "
             f"({package['best_model_name']}, "
-            f"{package['selection_mode']} selection) to "
-            f"{output['model_path']}"
+            f"{package['selection_mode']} selection) to your account."
         )
 
         metrics = package["metrics"]
@@ -209,7 +228,7 @@ if submitted:
         col3.metric("Macro F1", f"{metrics['macro_f1']:.3f}")
 
         st.subheader("Model comparison")
-        results = output["results"].round(4)
+        results = pd.DataFrame(output["results"]).round(4)
         left, right = st.columns([2, 3])
         left.dataframe(results, width="stretch", hide_index=True)
 
@@ -259,13 +278,17 @@ if submitted:
                 for name, error in output["errors"].items():
                     st.write(f"**{name}:** {error}")
 
-    except Exception as exc:
+    except api_client.ApiError as exc:
         st.error(f"Training failed: {exc}")
 
 st.divider()
 st.subheader("Saved disease models")
 
-saved_models = list_saved_models()
+try:
+    saved_models = api_client.list_models()
+except api_client.ApiError as exc:
+    st.error(str(exc))
+    saved_models = []
 
 if not saved_models:
     st.info("No disease models have been saved yet.")
@@ -276,7 +299,6 @@ else:
                 "Disease": item["name"],
                 "Target column": item["target"],
                 "Selected algorithm": item["model"],
-                "Artifact": item["path"],
             }
             for item in saved_models
         ],

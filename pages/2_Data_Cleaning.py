@@ -4,9 +4,9 @@
 import pandas as pd
 import streamlit as st
 
+from src import api_client
+from src.auth_ui import require_login
 from src.theme import apply_theme
-
-from src.data_cleaning import clean_dataset
 
 
 st.set_page_config(
@@ -15,6 +15,7 @@ st.set_page_config(
     layout="wide",
 )
 apply_theme()
+require_login()
 
 st.title("Data Cleaning")
 st.caption(
@@ -47,6 +48,7 @@ previous_source = st.session_state.get("cleaning_source_dataset")
 
 if previous_source is not df:
     st.session_state.pop("cleaned_dataset", None)
+    st.session_state.pop("cleaned_dataset_id", None)
     st.session_state.pop("cleaning_report", None)
     st.session_state["cleaning_source_dataset"] = df
 
@@ -173,14 +175,19 @@ if clean_clicked:
         with st.spinner(
             "Cleaning the dataset and preparing the quality report..."
         ):
-            cleaned_df, cleaning_report = clean_dataset(
-                df,
-                normalize_numeric=normalize_numeric,
-                normalize_categories=normalize_categories,
-                report_outliers=report_outliers,
-                outlier_iqr_multiplier=outlier_multiplier,
+            cleaned = api_client.clean_dataset(
+                st.session_state["loaded_dataset_id"],
+                {
+                    "normalize_numeric": normalize_numeric,
+                    "normalize_categories": normalize_categories,
+                    "report_outliers": report_outliers,
+                    "outlier_iqr_multiplier": outlier_multiplier,
+                },
             )
+            cleaned_df = api_client.download_dataset(cleaned["id"])
+            cleaning_report = pd.DataFrame(cleaned["report"])
 
+        st.session_state["cleaned_dataset_id"] = cleaned["id"]
         st.session_state["cleaned_dataset"] = cleaned_df
         st.session_state["cleaning_report"] = cleaning_report
         st.session_state["cleaning_source_dataset"] = df
@@ -207,8 +214,8 @@ if clean_clicked:
 
         st.success("Data cleaning completed successfully.")
 
-    except (ValueError, TypeError) as exc:
-        st.error(f"Could not clean this dataset: {exc}")
+    except api_client.ApiError as exc:
+        st.error(str(exc))
 
     except Exception as exc:
         st.error(

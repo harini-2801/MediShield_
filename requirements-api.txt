@@ -1,0 +1,13 @@
+fastapi
+uvicorn[standard]
+python-multipart
+sqlalchemy
+psycopg2-binary
+pyjwt
+pandas
+numpy
+scikit-learn
+shap
+openpyxl
+xlrd
+joblib

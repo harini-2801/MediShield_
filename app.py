@@ -3,6 +3,7 @@
 
 import streamlit as st
 
+from src.auth_ui import require_login
 from src.theme import apply_theme, card, hero
 
 
@@ -13,6 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 apply_theme()
+require_login()
 
 hero(
     "🩺 MediShield",
@@ -48,22 +50,6 @@ cols = st.columns(len(steps))
 for col, (num, title, body) in zip(cols, steps):
     with col:
         card(title, body, step=num)
-
-st.write("")
-st.header("What's new")
-n1, n2 = st.columns(2)
-with n1:
-    card(
-        "Hyperparameter control",
-        "Every model exposes its hyperparameters with plain-language "
-        "explanations, so you can see and decide how it learns.",
-    )
-with n2:
-    card(
-        "Manual model selection",
-        "Train any subset of algorithms and either let MediShield pick the "
-        "best by macro F1 or choose the one to deploy yourself.",
-    )
 
 st.write("")
 st.info(

@@ -99,7 +99,13 @@ def load_model_package(model_slug: str) -> dict:
         )
 
     # Only load artifacts created by a trusted local training workflow.
-    package = joblib.load(path)
+    return validate_package(joblib.load(path))
+
+
+def validate_package(package) -> dict:
+    """Check that a loaded model package has every required entry."""
+    if not isinstance(package, dict):
+        raise ValueError("The saved model package is not valid.")
 
     required = {
         "pipeline",
@@ -134,12 +140,14 @@ def train_disease_model(
     selected_models: list[str] | None = None,
     hyperparameters: dict[str, dict] | None = None,
     save_model: str | None = None,
+    model_dir: Path | None = None,
 ) -> dict:
     """Train the chosen classifiers and save one disease model.
 
     selected_models: algorithms to train (default: all available).
     hyperparameters: {algorithm: {param: value}} overrides of the defaults.
     save_model: algorithm to deploy; None picks the best by macro F1.
+    model_dir: where to write the artifact (default: artifacts/models).
     """
     selected_models = selected_models or list(HYPERPARAMETERS)
 
@@ -354,9 +362,10 @@ def train_disease_model(
         "test_rows": int(len(X_test)),
     }
 
-    MODEL_DIR.mkdir(parents=True, exist_ok=True)
+    target_dir = Path(model_dir) if model_dir else MODEL_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
 
-    model_path = MODEL_DIR / f"{model_slug}.joblib"
+    model_path = target_dir / f"{model_slug}.joblib"
     joblib.dump(package, model_path)
 
     return {

@@ -1,10 +1,38 @@
+databases:
+  - name: medishield-db
+    plan: free
+
 services:
+  # FastAPI backend: auth, datasets, training, prediction, explanations.
+  - type: web
+    name: medishield-api
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements-api.txt
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: medishield-db
+          property: connectionString
+
+  # Streamlit user interface; talks to the API over Render's private network.
   - type: web
     name: medishield
     runtime: python
     plan: free
-    buildCommand: pip install -r requirements.txt
+    buildCommand: pip install -r requirements-ui.txt
     startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: API_URL
+        fromService:
+          type: web
+          name: medishield-api
+          property: hostport

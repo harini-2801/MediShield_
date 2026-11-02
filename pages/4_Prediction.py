@@ -3,14 +3,11 @@
 
 import streamlit as st
 
-from src.theme import apply_theme
 import pandas as pd
 
-from src.model_training import (
-    list_saved_models,
-    load_model_package,
-)
-from src.prediction import predict_records
+from src import api_client
+from src.auth_ui import require_login
+from src.theme import apply_theme
 
 
 st.set_page_config(
@@ -19,6 +16,7 @@ st.set_page_config(
     layout="wide",
 )
 apply_theme()
+require_login()
 
 st.title("Patient Batch Prediction")
 
@@ -27,7 +25,11 @@ st.warning(
     "or validated clinical risk estimates."
 )
 
-saved_models = list_saved_models()
+try:
+    saved_models = api_client.list_models()
+except api_client.ApiError as exc:
+    st.error(str(exc))
+    st.stop()
 
 if not saved_models:
     st.info(
@@ -65,8 +67,8 @@ selected_label = st.selectbox(
 model_slug = model_options[selected_label]
 
 try:
-    package = load_model_package(model_slug)
-except Exception as exc:
+    package = api_client.get_model(model_slug)
+except api_client.ApiError as exc:
     st.error(f"Could not load selected model: {exc}")
     st.stop()
 
@@ -79,7 +81,7 @@ st.caption(
 )
 
 with st.expander("Model hyperparameters"):
-    from src.hyperparameters import HYPERPARAMETERS
+    HYPERPARAMETERS = api_client.catalog()["hyperparameters"]
 
     algo = package["best_model_name"]
     used = package.get("hyperparameters", {}).get(algo)
@@ -135,17 +137,15 @@ if uploaded_file is not None:
             type="primary",
         ):
             with st.spinner("Generating predictions..."):
-                results = predict_records(
-                    input_data=input_df,
-                    model_slug=model_slug,
-                    package=package,
-                )
+                csv_bytes = uploaded_file.getvalue()
+                results = api_client.predict(model_slug, csv_bytes)
 
                 # Preserve exactly the feature columns used by the model.
                 feature_df = input_df.loc[
                     :, package["feature_columns"]
                 ].copy()
 
+                st.session_state["prediction_csv"] = csv_bytes
                 st.session_state["prediction_package"] = package
                 st.session_state["prediction_features"] = feature_df
                 st.session_state["prediction_results"] = results
@@ -159,8 +159,8 @@ if uploaded_file is not None:
                 ):
                     st.session_state.pop(key, None)
 
-    except Exception as exc:
-            st.error(f"Could not process the uploaded CSV: {exc}")
+    except (api_client.ApiError, KeyError, ValueError) as exc:
+        st.error(f"Could not process the uploaded CSV: {exc}")
 
 results = st.session_state.get("prediction_results")
 same_model = (
