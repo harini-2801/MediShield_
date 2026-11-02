@@ -21,10 +21,13 @@ from sqlalchemy.orm import (
 
 
 def _database_url() -> str:
-    url = os.environ.get("DATABASE_URL", "sqlite:///./medishield.db")
-    # Render supplies the legacy "postgres://" scheme.
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+    url = os.environ.get("DATABASE_URL", "sqlite:///./medishield.db").strip()
+    # Render supplies "postgres://" or "postgresql://". Name the driver
+    # explicitly: newer SQLAlchemy would otherwise pick psycopg 3, but this
+    # project installs psycopg2.
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg2://" + url[len(prefix):]
     return url
 
 
