@@ -295,6 +295,28 @@ def clean(
     return {"id": row.id, "report": report_records}
 
 
+class SplitCheckRequest(BaseModel):
+    target_column: str
+    test_size: float = Field(0.2, ge=0.1, le=0.4)
+    random_state: int = Field(42, ge=0, le=9999)
+
+
+@app.post("/datasets/{dataset_id}/split-check")
+def split_check(
+    dataset_id: int,
+    body: SplitCheckRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+):
+    """Preview the exact stratified split that training would use."""
+    from src.splitting import split_report
+
+    df = load_df(get_dataset(db, user, dataset_id))
+    return split_report(
+        df, body.target_column, body.test_size, body.random_state
+    )
+
+
 # ------------------------------------------------------------------- models
 
 class TrainRequest(BaseModel):

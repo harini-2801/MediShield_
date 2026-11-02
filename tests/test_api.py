@@ -76,6 +76,13 @@ def test_full_workflow_and_isolation(client):
     )
     assert cleaned.status_code == 200, cleaned.text
 
+    check = client.post(
+        f"/datasets/{cleaned.json()['id']}/split-check", headers=alice,
+        json={"target_column": "y", "test_size": 0.25, "random_state": 3},
+    )
+    assert check.status_code == 200 and check.json()["valid"], check.text
+    assert check.json()["test_rows"] == 50
+
     train = client.post("/models/train", headers=alice, json={
         "dataset_id": cleaned.json()["id"],
         "target_column": "y",

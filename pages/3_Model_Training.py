@@ -7,6 +7,7 @@ import streamlit as st
 
 from src import api_client
 from src.auth_ui import require_login
+from src.split_ui import render_split_report
 from src.theme import apply_theme, hero
 
 
@@ -109,7 +110,7 @@ test_size = c3.slider(
     "Held-out test proportion",
     min_value=0.1,
     max_value=0.4,
-    value=0.2,
+    value=st.session_state.get("split_test_size", 0.2),
     step=0.05,
     help="Share of records kept aside to evaluate the models.",
 )
@@ -119,10 +120,25 @@ random_state = c4.number_input(
     "Random seed",
     min_value=0,
     max_value=9999,
-    value=42,
+    value=st.session_state.get("split_random_state", 42),
     step=1,
     help="Fixes the shuffling so results are reproducible.",
 )
+
+with st.expander("Preview the train / test split"):
+    if st.button("Check split", key="check_split_button"):
+        try:
+            with st.spinner("Checking the split..."):
+                render_split_report(api_client.split_check(
+                    st.session_state.get("cleaned_dataset_id")
+                    if st.session_state.get("cleaned_dataset") is not None
+                    else st.session_state.get("loaded_dataset_id"),
+                    target_column,
+                    test_size,
+                    int(random_state),
+                ))
+        except api_client.ApiError as exc:
+            st.error(str(exc))
 
 st.subheader("2 · Algorithms & hyperparameters")
 st.markdown(

@@ -9,6 +9,7 @@ import pandas as pd
 
 from src import api_client
 from src.auth_ui import require_login
+from src.split_ui import render_split_report
 from src.theme import apply_theme
 
 
@@ -241,6 +242,47 @@ if st.session_state.get("selected_target") in target_options:
             "This target has fewer than two observed classes. "
             "It may not be suitable for classification."
         )
+
+    st.subheader("Train / test split check")
+    st.write(
+        "Models are trained on the training set and scored on the held-out "
+        "test set. This is the exact split that will be used for training, "
+        "so you can check it before you train."
+    )
+
+    s1, s2 = st.columns([3, 1])
+    split_test_size = s1.slider(
+        "Held-out test proportion",
+        min_value=0.1,
+        max_value=0.4,
+        value=st.session_state.get("split_test_size", 0.2),
+        step=0.05,
+        key="upload_split_test_size",
+        help="Share of labeled records kept aside to evaluate the models.",
+    )
+    split_seed = s2.number_input(
+        "Random seed",
+        min_value=0,
+        max_value=9999,
+        value=st.session_state.get("split_random_state", 42),
+        step=1,
+        key="upload_split_seed",
+        help="Fixes the shuffling so the split is reproducible.",
+    )
+    st.session_state["split_test_size"] = split_test_size
+    st.session_state["split_random_state"] = int(split_seed)
+
+    try:
+        with st.spinner("Checking the split..."):
+            report = api_client.split_check(
+                st.session_state["loaded_dataset_id"],
+                target,
+                split_test_size,
+                int(split_seed),
+            )
+        render_split_report(report)
+    except api_client.ApiError as exc:
+        st.error(str(exc))
 
 st.divider()
 

@@ -188,6 +188,19 @@ def clean_dataset(dataset_id: int, options: dict) -> dict:
     ).json()
 
 
+def split_check(
+    dataset_id: int, target_column: str, test_size: float, random_state: int
+) -> dict:
+    return _request(
+        "POST", f"/datasets/{dataset_id}/split-check",
+        json={
+            "target_column": target_column,
+            "test_size": test_size,
+            "random_state": random_state,
+        },
+    ).json()
+
+
 # ------------------------------------------------------------------- models
 
 def train_model(payload: dict) -> dict:

@@ -16,25 +16,17 @@ from sklearn.metrics import (
     balanced_accuracy_score,
     f1_score,
 )
-from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import LabelEncoder
 
 from src.hyperparameters import HYPERPARAMETERS, build_models, default_params
-from src.preprocessing import build_preprocessor, split_features_target
+from src.preprocessing import build_preprocessor
+from src.splitting import IDENTIFIER_COLUMNS, prepare_split
 
 
 # Anchor to the project root so saved models are found no matter which
 # directory Streamlit was launched from.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 MODEL_DIR = PROJECT_ROOT / "artifacts" / "models"
-
-IDENTIFIER_COLUMNS = {
-    "id",
-    "patient_id",
-    "record_id",
-}
-
 
 def slugify(value: str) -> str:
     """Convert a disease name into a safe filename."""
@@ -156,83 +148,18 @@ def train_disease_model(
             f"'{save_model}' must be among the trained models."
         )
 
-    if not 0.1 <= test_size <= 0.4:
-        raise ValueError(
-            "Test size must be between 0.1 and 0.4."
-        )
-
     disease_name = disease_name.strip()
 
     if not disease_name:
         raise ValueError("Enter a disease model name.")
 
-    if target_column not in df.columns:
-        raise ValueError(
-            f"Target column '{target_column}' does not exist."
-        )
-
-    # Remove rows with missing target labels.
-    labeled_df = df.loc[df[target_column].notna()].copy()
-
-    if labeled_df.empty:
-        raise ValueError(
-            "The selected target contains no labeled records."
-        )
-
-    X, y = split_features_target(
-        labeled_df,
-        target_column,
-    )
-
-    # Identifiers should identify records, not predict disease.
-    identifier_columns = [
-        column
-        for column in X.columns
-        if str(column).strip().lower() in IDENTIFIER_COLUMNS
-    ]
-
-    X = X.drop(columns=identifier_columns)
-
-    if X.empty:
-        raise ValueError(
-            "No predictive features remain after excluding IDs."
-        )
-
-    # Encode target labels consistently for the saved pipeline.
-    label_encoder = LabelEncoder()
-    y_encoded = label_encoder.fit_transform(y.astype(str))
-
-    class_counts = pd.Series(y_encoded).value_counts()
-    n_classes = len(class_counts)
-
-    if n_classes < 2:
-        raise ValueError(
-            "The target must contain at least two classes."
-        )
-
-    if class_counts.min() < 2:
-        raise ValueError(
-            "Every target class needs at least two records "
-            "for a stratified train/test split."
-        )
-
-    n_test = max(
-        int(np.ceil(len(y_encoded) * test_size)),
-        n_classes,
-    )
-
-    if n_test >= len(y_encoded) or len(y_encoded) - n_test < n_classes:
-        raise ValueError(
-            "There are too few records for this stratified split."
-        )
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        X,
-        y_encoded,
-        test_size=test_size,
-        random_state=random_state,
-        stratify=y_encoded,
-    )
+    # Same function the upload-time split check uses.
+    split = prepare_split(df, target_column, test_size, random_state)
+    X = split["X"]
+    X_train, X_test = split["X_train"], split["X_test"]
+    y_train, y_test = split["y_train"], split["y_test"]
+    label_encoder = split["label_encoder"]
+    identifier_columns = split["identifier_columns"]
 
     models = build_models(
         selected_models,
