@@ -1,4 +1,6 @@
+# The Streamlit service also hosts the API in-process, so it needs the
+# backend dependencies as well as the UI ones.
+-r requirements-api.txt
 streamlit
-pandas
 plotly
 requests

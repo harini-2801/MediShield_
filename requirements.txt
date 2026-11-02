@@ -1,5 +1,4 @@
-# Everything for local development. Deployments use the two files below.
--r requirements-api.txt
+# Everything for local development and deployment.
 -r requirements-ui.txt
 pytest
 httpx
